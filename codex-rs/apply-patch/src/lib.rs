@@ -81,9 +81,15 @@ pub struct ApplyPatchArgs {
     pub hunks: Vec<Hunk>,
 }
 
+pub const CODEX_APPLY_PATCH_ARG1: &str = "--codex-run-as-apply-patch";
+
 pub fn maybe_parse_apply_patch(argv: &[String]) -> MaybeApplyPatch {
     match argv {
         [cmd, body] if cmd == "apply_patch" => match parse_patch(body) {
+            Ok(source) => MaybeApplyPatch::Body(source),
+            Err(e) => MaybeApplyPatch::PatchParseError(e),
+        },
+        [_cmd, flag, body] if flag == CODEX_APPLY_PATCH_ARG1 => match parse_patch(body) {
             Ok(source) => MaybeApplyPatch::Body(source),
             Err(e) => MaybeApplyPatch::PatchParseError(e),
         },
@@ -733,6 +739,31 @@ mod tests {
 +hi
 *** End Patch
 PATCH"#,
+        ]);
+
+        match maybe_parse_apply_patch(&args) {
+            MaybeApplyPatch::Body(ApplyPatchArgs { hunks, patch: _ }) => {
+                assert_eq!(
+                    hunks,
+                    vec![Hunk::AddFile {
+                        path: PathBuf::from("foo"),
+                        contents: "hi\n".to_string()
+                    }]
+                );
+            }
+            result => panic!("expected MaybeApplyPatch::Body got {result:?}"),
+        }
+    }
+
+    #[test]
+    fn test_codex_wrapper() {
+        let args = strs_to_strings(&[
+            "codex",
+            CODEX_APPLY_PATCH_ARG1,
+            r#"*** Begin Patch
+*** Add File: foo
++hi
+*** End Patch"#,
         ]);
 
         match maybe_parse_apply_patch(&args) {

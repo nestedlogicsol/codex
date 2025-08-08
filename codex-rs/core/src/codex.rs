@@ -1895,28 +1895,52 @@ async fn handle_container_exec_with_params(
     let sandbox_type = match safety {
         SafetyCheck::AutoApprove { sandbox_type } => sandbox_type,
         SafetyCheck::AskUser => {
-            let rx_approve = sess
-                .request_command_approval(
-                    sub_id.clone(),
-                    call_id.clone(),
-                    params.command.clone(),
-                    params.cwd.clone(),
-                    params.justification.clone(),
-                )
-                .await;
-            match rx_approve.await.unwrap_or_default() {
-                ReviewDecision::Approved => (),
-                ReviewDecision::ApprovedForSession => {
-                    sess.add_approved_command(params.command.clone());
+            if let Some(ApplyPatchExec { action, .. }) = &apply_patch_exec {
+                let rx_approve = sess
+                    .request_patch_approval(
+                        sub_id.clone(),
+                        call_id.clone(),
+                        action,
+                        params.justification.clone(),
+                        None,
+                    )
+                    .await;
+                match rx_approve.await.unwrap_or_default() {
+                    ReviewDecision::Approved | ReviewDecision::ApprovedForSession => (),
+                    ReviewDecision::Denied | ReviewDecision::Abort => {
+                        return ResponseInputItem::FunctionCallOutput {
+                            call_id,
+                            output: FunctionCallOutputPayload {
+                                content: "patch rejected by user".to_string(),
+                                success: None,
+                            },
+                        };
+                    }
                 }
-                ReviewDecision::Denied | ReviewDecision::Abort => {
-                    return ResponseInputItem::FunctionCallOutput {
-                        call_id,
-                        output: FunctionCallOutputPayload {
-                            content: "exec command rejected by user".to_string(),
-                            success: None,
-                        },
-                    };
+            } else {
+                let rx_approve = sess
+                    .request_command_approval(
+                        sub_id.clone(),
+                        call_id.clone(),
+                        params.command.clone(),
+                        params.cwd.clone(),
+                        params.justification.clone(),
+                    )
+                    .await;
+                match rx_approve.await.unwrap_or_default() {
+                    ReviewDecision::Approved => (),
+                    ReviewDecision::ApprovedForSession => {
+                        sess.add_approved_command(params.command.clone());
+                    }
+                    ReviewDecision::Denied | ReviewDecision::Abort => {
+                        return ResponseInputItem::FunctionCallOutput {
+                            call_id,
+                            output: FunctionCallOutputPayload {
+                                content: "exec command rejected by user".to_string(),
+                                success: None,
+                            },
+                        };
+                    }
                 }
             }
             // No sandboxing is applied because the user has given
