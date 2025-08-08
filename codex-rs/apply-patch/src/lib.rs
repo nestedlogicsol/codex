@@ -760,7 +760,10 @@ PATCH"#,
         let args = strs_to_strings(&[
             "codex",
             CODEX_APPLY_PATCH_ARG1,
-            r#"*** Begin Patch\n*** Add File: foo\n+hi\n*** End Patch"#,
+            r#"*** Begin Patch
+*** Add File: foo
++hi
+*** End Patch"#,
         ]);
 
         match maybe_parse_apply_patch(&args) {
